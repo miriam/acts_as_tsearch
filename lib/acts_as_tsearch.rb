@@ -125,7 +125,7 @@ module TsearchMixin
         #
         #TODO:  Not sure how to handle order... current we add to it if it exists but this might not
         #be the right thing to do
-        def find_by_tsearch(search_string, options = nil, tsearch_options = nil)
+        def find_by_tsearch(search_string, options = nil, tsearch_options = nil, page = 1, per_page = 10)
           raise ActiveRecord::RecordNotFound, "Couldn't find #{name} without a search string" if search_string.nil? || search_string.empty?
 
           options = {} if options.nil?
@@ -199,7 +199,7 @@ module TsearchMixin
           end
           
           #finally - return results
-          find(:all, options)
+          find(:all, options).paginate(:page => page, :per_page => per_page)
           # find(:all,
           #   :select => "#{table_name}.*, rank_cd(blogger_groups.vectors, query) as rank",
           #   :from => "#{table_name}, to_tsquery('default','#{search_string}') as query",
