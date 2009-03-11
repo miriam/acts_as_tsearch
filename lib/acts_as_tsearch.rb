@@ -126,6 +126,7 @@ module TsearchMixin
         #TODO:  Not sure how to handle order... current we add to it if it exists but this might not
         #be the right thing to do
         def find_by_tsearch(search_string, options = nil, tsearch_options = nil, page = 1, per_page = 10)
+          raise "You must upgrade to Postgres 8.3 before using tsearch" unless is_postgresql_83?
           raise ActiveRecord::RecordNotFound, "Couldn't find #{name} without a search string" if search_string.nil? || search_string.empty?
 
           options = {} if options.nil?
@@ -143,11 +144,8 @@ module TsearchMixin
           search_string = fix_tsearch_query(search_string) if tsearch_options[:fix_query] == true
           
           #add tsearch_rank to fields returned
-          if is_postgresql_83?
-            tsearch_rank_function = "ts_rank_cd(#{table_name}.#{tsearch_options[:vector]},tsearch_query#{','+tsearch_options[:normalization].to_s if tsearch_options[:normalization]})"
-          else
-            tsearch_rank_function = "rank_cd(#{table_name}.#{tsearch_options[:vector]},tsearch_query#{','+tsearch_options[:normalization].to_s if tsearch_options[:normalization]})"
-          end
+          tsearch_rank_function = "ts_rank_cd(#{table_name}.#{tsearch_options[:vector]},tsearch_query#{','+tsearch_options[:normalization].to_s if tsearch_options[:normalization]})"
+
           select_part = "#{tsearch_rank_function} as tsearch_rank"
           if options[:select]
             if options[:select].downcase != "count(*)"
@@ -160,20 +158,12 @@ module TsearchMixin
           #add headlines
           if tsearch_options[:headlines]
             tsearch_options[:headlines].each do |h|
-              if is_postgresql_83?
-                options[:select] << ", ts_headline(#{table_name}.#{h},tsearch_query) as #{h}_headline"
-              else
-                options[:select] << ", headline('#{locale}',#{table_name}.#{h},tsearch_query) as #{h}_headline"
-              end
+              options[:select] << ", ts_headline(#{table_name}.#{h},tsearch_query) as #{h}_headline"
             end
           end
           
           #add tsearch_query to from
-          if is_postgresql_83?
-            from_part = "to_tsquery('#{search_string}') as tsearch_query"
-          else
-            from_part = "to_tsquery('#{locale}','#{search_string}') as tsearch_query"
-          end
+          from_part = "to_tsquery('#{search_string}') as tsearch_query"
           if options[:from]
             options[:from] = "#{from_part}, #{options[:from]}"
           else
@@ -314,17 +304,9 @@ module TsearchMixin
             fields = @tsearch_config[vector_name.intern][:fields]
             tables = @tsearch_config[vector_name.intern][:tables]
             if fields.is_a?(Array)
-              if is_postgresql_83?
-                sql = "update #{table_name} set #{vector_name} = to_tsvector(#{coalesce_array(fields)})"
-              else
-                sql = "update #{table_name} set #{vector_name} = to_tsvector('#{locale}',#{coalesce_array(fields)})"
-              end
+              sql = "update #{table_name} set #{vector_name} = to_tsvector(#{coalesce_array(fields)})"
             elsif fields.is_a?(String)
-              if is_postgresql_83?
-                sql = "update #{table_name} set #{vector_name} = to_tsvector(#{fields})"
-              else
-                sql = "update #{table_name} set #{vector_name} = to_tsvector('#{locale}', #{fields})"  
-              end
+              sql = "update #{table_name} set #{vector_name} = to_tsvector(#{fields})"
             elsif fields.is_a?(Hash)
               if fields.size > 4
                 raise "acts_as_tsearch currently only supports up to 4 weighted sets."
@@ -332,11 +314,7 @@ module TsearchMixin
                 setweights = []
                 ["a","b","c","d"].each do |f|
                   if fields[f]
-                    if is_postgresql_83?
-                      setweights << "setweight( to_tsvector(#{coalesce_array(fields[f][:columns])}),'#{f.upcase}')"
-                    else
-                      setweights << "setweight( to_tsvector('#{locale}', #{coalesce_array(fields[f][:columns])}),'#{f.upcase}')"
-                    end
+                    setweights << "setweight( to_tsvector(#{coalesce_array(fields[f][:columns])}),'#{f.upcase}')"
                   end
                 end
                 sql = "update #{table_name} set #{vector_name} = #{setweights.join(" || ")}"
