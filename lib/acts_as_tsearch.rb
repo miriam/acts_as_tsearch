@@ -231,32 +231,7 @@ module TsearchMixin
         def check_for_vector_column(vector_name = "vectors")
           #check for the basics
           if !column_names().include?(vector_name)
-            #puts "Creating vector column"
-            create_vector(vector_name)
-            #puts "Update vector index"
-            update_vector(nil,vector_name)
-            # raise "Table is missing column [vectors].  Run method create_vector and then 
-            # update_vector to create this column and populate it."
-          end
-        end
-
-        #current just falls through if it fails... this needs work
-        def create_vector(vector_name = "vectors")
-          sql = []
-          if column_names().include?(vector_name)
-            sql << "alter table #{table_name} drop column #{vector_name}"
-          end
-          sql << "alter table #{table_name} add column #{vector_name} tsvector"
-          sql << "CREATE INDEX #{table_name}_fts_#{vector_name}_index ON #{table_name} USING gist(#{vector_name})"
-          sql.each do |s|
-            begin
-              connection.execute(s)
-              #puts s
-              reset_column_information
-            rescue StandardError => bang
-              puts "Error in create_vector executing #{s} " + bang.to_yaml
-              puts ""
-            end
+            raise "Table #{table_name} doesn't have a tsearch vector column. Do you need to migrate?"
           end
         end
         
@@ -295,7 +270,7 @@ module TsearchMixin
         def update_vector(row_id = nil, vector_name = "vectors")
           sql = ""
           if !column_names().include?(vector_name)
-            create_vector(vector_name)
+            raise "Table #{table_name} doesn't have a tsearch vector column. Do you need to migrate?"
           end
           if !@tsearch_config[vector_name.intern]
             raise "Missing vector #{vector_name} in hash #{@tsearch_config.to_yaml}"
